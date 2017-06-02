@@ -1,0 +1,187 @@
+<!DOCTYPE HTML>
+<HTML>
+
+<head>
+    <title>ADMIN CHATTING</title>
+    <link rel="stylesheet" href="/css/home.css" />
+</head>
+
+<body>
+    <div id="wrapper">
+        <div id="header">
+            <label id="title">CHAT WITH CLIENTS</label>
+        </div>
+        <div id="body">
+            <div id="user-list">
+                <span class="text-center">
+                    <label>Clients are online  ( <b id="lblNumOfClients"></b> )</label>
+                    <hr/>
+                </span>
+                <div id="divCurrentClients">
+                    <ul id="ulClients">
+                    </ul>
+                </div>
+                <br/>
+                <span class="text-center">
+                    <label>Timeline</label>
+                    <hr/>
+                </span>
+                <div id="divMessages">
+                </div>
+            </div>
+            <div id="chatting-form">
+                <div>
+                    <label>Hello, <b><%=user.username %></b></label>
+                    <a href="/admin/logout">Logout</a>
+                </div>
+                <div id="divMultiChats">
+
+                    <!--<div class="divChatToClient">
+                        <div class="divClientHeader">
+                            <label class="clientName">[Client Username]</label>
+                        </div>
+                        <div class="divClientMessage">
+                            <label>oke</label>
+                        </div>
+                        <div class="divClientChatting">
+                            <input type="text" class="txtMessage" />
+                            <input type="submit" class="btnSendMessage" value="SEND" />
+                        </div>
+                    </div>-->
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        var socket = io();
+        var CURRENT_USERNAME = "<%=user.username %>";
+        $(document).ready(function ($) {
+
+            //send info to server
+            socket.emit("client_send_info", {
+                name: CURRENT_USERNAME,
+                isAdmin: true
+            });
+
+            //get all clients from server
+            socket.on("server_send_all_clients", function (_clients) {
+                $("#lblNumOfClients").text(_clients.length);
+                $("#ulClients").html('');
+                _clients.forEach(function (client, index) {
+                    $("#ulClients").append(
+                        '<ul>' + client.name + '</ul>'
+                    );
+
+                    //append div message
+                    addNewFormChat(client);
+                });
+            });
+
+            //get message of clients from server
+            socket.on("server_send_message_to_admin", function (_data) {
+                $("#divMessages").append(
+                    '<label><b>' + _data.clientName + ' : </b> ' + _data.message + '</label><br/>'
+                );
+
+                //add client message to target div message
+                const frmChatClient = $("#" + _data.clientId);
+                if(frmChatClient){
+                    const socketId = frmChatClient.attr("data-socketId");
+                    const divClientMessage = frmChatClient.find(".divClientMessage"); 
+                    if(socketId == _data.clientId){
+                        divClientMessage.append(
+                            '<label><b>' + _data.clientName + ' : </b> ' + _data.message + '</label><br/>'
+                        );
+                    }
+                }
+            });
+
+            //when a new client is created, then create div message for admin chat with client
+            socket.on("server_send_new_client", function (_newClient) {
+                $("#divMessages").append(
+                    '<label><b>' + _newClient.name + ' : </b> is connected</label><br/>'
+                );
+
+                //append div message
+                addNewFormChat(_newClient);
+            });
+
+            //when a new client is disconnected, then remove div message for admin chat with client
+            socket.on("server_send_client_out", function (_client) {
+                $("#divMessages").append(
+                    '<label><b>' + _client.name + ' : </b> is disconnected</label><br/>'
+                );
+
+                //remove div message
+                const frmChatClient = $("#" + _client.id);
+                if(frmChatClient){
+                    frmChatClient.parent().remove();
+                }
+            });
+        });
+
+        // prevent when submit form
+        $(document.body).on("submit", ".frmChatClients", function (e) {
+            e.preventDefault();
+            const txtMessage = $(this).find(".txtMessage");
+            const divClientMessage = $(this).find(".divClientMessage");
+
+            const data = {
+                clientId: $(this).attr("data-socketId"),
+                message: txtMessage.val()
+            };
+
+            //admin send message to target client
+            socket.emit("admin_send_message_to_client", data);
+
+            divClientMessage.append(
+                '<label><b>ADMIN : </b> ' + txtMessage.val() + '</label><br/>'
+            );
+            txtMessage.val('');
+        });
+
+        function addNewFormChat(_newClient) {
+            
+            const formIsExist = checkFormChatClientIsExist(_newClient.id);
+            if(formIsExist == true){
+                return;
+            }
+
+            $("#divMultiChats").append(
+                `    
+                    <div class="divChatToClient">
+                        <form class="frmChatClients" id="${_newClient.id}" data-socketId="${_newClient.id}">
+                            <div class="divClientHeader">
+                                <label class="clientName"><b>${_newClient.name}</b></label>
+                            </div>
+                            <div class="divClientMessage">
+                            </div>
+                            <div class="divClientChatting">
+                                <input type="text" class="txtMessage" placeholder="Let say something ..." required="required" />
+                                <input type="submit" class="btnSendMessage" value="SEND" />
+                            </div>
+                        </form>
+                    </div>
+                `
+            );
+        }
+
+        function checkFormChatClientIsExist(_clientId){
+
+            //check if exist form chat of client then not create again
+            let socketId = "";
+            for(let frmChatClient of $(".frmChatClients")){
+                socketId = $(frmChatClient).attr("data-socketId");
+                if(socketId == _clientId){
+                    return true;
+                }
+            }
+            return false;
+        }
+    </script>
+</body>
+</HTML>
